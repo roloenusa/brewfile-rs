@@ -1,4 +1,4 @@
-workspace = { members = [ "brewfile-parser", "hello-world-derive"] }
+workspace = { members = [ "brewfile-derive", "brewfile-parser", "hello-world-derive"] }
 [package]
 name = "brewfile-rs"
 version = "0.1.0"
