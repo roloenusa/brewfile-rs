@@ -1,3 +1,4 @@
+use nom::Parser;
 use nom::{branch::alt, combinator::value, bytes::complete::tag, sequence::terminated, IResult};
 use nom::character::complete::space0;
 
@@ -32,16 +33,16 @@ impl<'a> BrewCommand<'a> {
         brew.pkg= pkg.to_string();
 
         // Check if this is the last parameter on the set
-        let (remainder, last) = is_last(remainder)?;
+        let (remainder, last) = is_last(remainder).unwrap();
         let mut last = last;
         let mut result_remainder = remainder;
 
         // Loop over all the parameters and update as needed
         while !last {
-            let (remainder, key) = terminated(alt((tag("args"), tag("link"))), terminated(tag(":"), space0))(result_remainder)?;
+            let (remainder, key) = terminated(alt((tag("args"), tag("link"))), terminated(tag(":"), space0)).parse(result_remainder)?;
             let remainder = match key {
                 "args" => {
-                    let (remainder, value) = alt((parse_list, parse_object))(remainder)?;
+                    let (remainder, value) = alt((parse_list, parse_object)).parse(remainder)?;
                     brew.args = value;
                     remainder
                 },
@@ -49,7 +50,7 @@ impl<'a> BrewCommand<'a> {
                     let (remainder, value) = alt((
                         value(LinkOptions::On, tag("true")),
                         value(LinkOptions::Override, tag(":override"))
-                    ))(remainder)?;
+                    )).parse(remainder)?;
                     brew.link = value;
                     remainder
                 },

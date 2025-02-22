@@ -1,5 +1,6 @@
 use nom::branch::alt;
 use nom::sequence::terminated;
+use nom::Parser;
 use nom::{bytes::complete::tag, IResult};
 use nom::character::complete::{alpha1, space1};
 
@@ -35,7 +36,7 @@ fn parse(input: &str) -> IResult<&str, MetaCommand> {
         let (remainder, command) = alt((
             terminated(alpha1, space1),
             terminated(tag("##"), space1),
-        ))(res_remainder.trim())?;
+        )).parse(res_remainder.trim())?;
 
         res_remainder = match command {
             "tap" => {
