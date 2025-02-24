@@ -198,6 +198,8 @@ pub enum Ident {
 pub trait ParseIdent<T> {
     fn parse(&self) -> Result<T, String>;
 }
+
+
 impl<T> ParseIdent<T> for Ident
 where
     T: FromStr,
@@ -211,6 +213,38 @@ where
     }
 }
 
+pub trait ParseIdentVec<T> {
+    fn parse_vector(&self) -> Result<Vec<T>, String>;
+}
+
+impl<T> ParseIdentVec<T> for Ident
+where
+    T: FromStr,
+    T::Err: std::fmt::Display,
+{
+    fn parse_vector(&self) -> Result<Vec<T>, String> {
+        match self {
+            Ident::List(vec) => {
+                let mut parsed_values = Vec::new();
+                let mut errors = Vec::new();
+
+                for item in vec {
+                    match item.parse::<T>() {
+                        Ok(parsed) => parsed_values.push(parsed),
+                        Err(e) => errors.push(format!("Failed to parse '{}' as target type: {}", item, e)),
+                    }
+                }
+
+                if errors.is_empty() {
+                    Ok(parsed_values)
+                } else {
+                    Err(format!("Cannot parse Ident variant into target type {:#?}", self))
+                }
+            }
+            _ => Err(format!("Cannot parse Ident variant into target type {:#?}", self)),
+        }
+    }
+}
 
 /**
  * META

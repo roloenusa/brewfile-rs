@@ -1,6 +1,6 @@
 extern crate proc_macro;
 
-use syn::{parse_macro_input, DeriveInput, Type, Data, Fields};
+use syn::{parse_macro_input, DeriveInput, Data, Fields};
 
 #[macro_use]
 extern crate quote;
@@ -19,37 +19,16 @@ fn impl_parse(ast: &DeriveInput) -> TokenStream {
     let struct_name = &ast.ident;
 
     // Collect the field names and types
-    let mut field_inits = Vec::new(); // To store field initializations
     let mut field_names = Vec::new();  // To store field names for `call` method
     let mut arg_fields = Vec::new();
 
     if let Data::Struct(ref data_struct) = ast.data {
-
         // Iterate over the fields of the struct
         for field in &data_struct.fields {
             let field_name = field.ident.as_ref().unwrap();
-            let field_type = &field.ty;
 
             // Store the field name for the `call` method
             field_names.push(field_name);
-
-            // Generate code to initialize the field
-            let init_value = match field_type {
-                // If the field is `i32`, we initialize it to `10`
-                Type::Path(type_path) if type_path.path.is_ident("i32") => quote! { 10 },
-                // If the field is `String`, we initialize it to `String::from("hello")`
-                Type::Path(type_path) if type_path.path.is_ident("String") => quote! {
-
-                    String::from("hello")
-
-                },
-
-                // Handle other types if needed (you can extend this part)
-                _ => quote! { Default::default() }, // Default initialization for other types
-            };
-
-            // Add the field initialization to the list
-            field_inits.push(quote! { #field_name: #init_value });
 
             for attr in &field.attrs {
                 if attr.path().is_ident("arg") {
@@ -63,29 +42,7 @@ fn impl_parse(ast: &DeriveInput) -> TokenStream {
 
     let mut gen = quote! {};
 
-    gen.extend(quote! {
-        impl #struct_name {
-            pub fn init(fields: String) -> Self {
-                Self {
-                    #(#field_inits),*
-                }
-            }
-        }
-    });
-
-    gen.extend(quote! {
-        impl #struct_name {
-            pub fn parse(input: &str) -> Self {
-                let (_, value) = brewfile_parser::ast::get_command(input).unwrap();
-                println!("Value: {:#?}", value.cmd);
-
-                Self {
-                    #(#field_inits),*
-                }
-            }
-        }
-    });
-
+    // Check only structs and named fields are allowed
     let fields = if let Data::Struct(data) = &ast.data {
         if let Fields::Named(fields) = &data.fields {
             &fields.named
@@ -96,47 +53,92 @@ fn impl_parse(ast: &DeriveInput) -> TokenStream {
         panic!("ParseFromMap can only be used on structs");
     };
 
-    // Generate parsing logic for each field
+    // Iterate over each value of the vector and attempt to parse the field
     let field_assignments = fields.iter().map(|field| {
         let field_name = field.ident.as_ref().unwrap();
         let field_type = &field.ty;
+        let is_vec = match field_type {
+            syn::Type::Path(type_path) => {
+                let path = &type_path.path;
+                path.segments.len() == 1 && path.segments[0].ident == "Vec"
+            }
+            _ => false,
+        };
 
-        quote! {
-            #field_name: value.get(stringify!(#field_name))
-                .ok_or_else(|| format!("Missing field: {}", stringify!(#field_name)))?
-                .parse::<#field_type>()
-                .map_err(|_| format!("Failed to parse field: {} as {}", stringify!(#field_name), stringify!(#field_type)))?
-        }
-    });
+        if is_vec {
+            quote! {
+                #field_name: {
+                    let value = values.get(index)
+                        .ok_or_else(|| format!("Missing value for field `{}`", stringify!(#field_name)))?;
+                    index += 1;
 
-    // Generate the `parse` function implementation
-    let expanded = quote! {
-        impl #struct_name {
-            pub fn parse_t(value: std::collections::HashMap<String, String>) -> Result<Self, String> {
-                Ok(Self {
-                    #(#field_assignments),*
-                })
+                    value.parse_vector()
+                        .map_err(|errs| format!("Failed to parse list field `{}`: {:?}", stringify!(#field_name), errs))?
+                }
+            }
+        } else {
+            quote! {
+                #field_name: {
+                    let value = values.get(index)
+                        .ok_or_else(|| format!("Missing value for field `{}`", stringify!(#field_name)))?;
+                    index += 1;
+
+                    value.parse()
+                        .map_err(|e| format!("Failed to parse field `{}`: {}", stringify!(#field_name), e))?
+                }
             }
         }
-    };
-    gen.extend(expanded);
 
-    let field_assignments = fields.iter().map(|field| {
-        let field_name = field.ident.as_ref().unwrap();
 
-        quote! {
-            #field_name: {
-                let value = values.get(index)
-                    .ok_or_else(|| format!("Missing value for field `{}`", stringify!(#field_name)))?;
-                index += 1;
-                value.parse()
-                    .map_err(|e| format!("Failed to parse field `{}`: {}", stringify!(#field_name), e))?
-            }
-        }
+        // quote! {
+            // #field_name: {
+            //     let value = values.get(index)
+            //         .ok_or_else(|| format!("Missing value for field `{}`", stringify!(#field_name)))?;
+            //     index += 1;
+            //
+            //     // value.parse()
+            //     //     .map_err(|e| format!("Failed to parse field `{}`: {}", stringify!(#field_name), e))?
+            //
+            //     // match value {
+            //     //     brewfile_parser::ast::Ident::Str(_) => {
+            //     //         value.parse()
+            //     //         .map_err(|e| format!("Failed to parse field `{}`: {}", stringify!(#field_name), e))?
+            //     //     },
+            //     //     // brewfile_parser::ast::Ident::List(_) => {
+            //     //     //     value.parse_vector()
+            //     //     //     .map_err(|e| format!("Failed to parse field `{}`: {}", stringify!(#field_name), e))?
+            //     //     // }
+            //     //     _ => panic!("Unable to parse value"),
+            //     // }
+            //
+            //     if let brewfile_parser::ast::Ident::List(_) = value {
+            //         value.parse_vector()
+            //             .map_err(|errs| format!("Failed to parse list field `{}`: {:?}", stringify!(#field_name), errs))?
+            //     } else {
+            //         value.parse()
+            //             .map_err(|e| format!("Failed to parse field `{}`: {}", stringify!(#field_name), e))?
+            //     }
+            // }
+            // #field_name: {
+            //     let value = values.get(index)
+            //         .ok_or_else(|| format!("Missing value for field `{}`", stringify!(#field_name)))?;
+            //     index += 1;
+            //
+            //     if <#field_type as std::any::Any>::type_id() == <Vec<String> as std::any::Any>::type_id() {
+            //         value.parse_vector()
+            //             .map_err(|errs| format!("Failed to parse list field `{}`: {:?}", stringify!(#field_name), errs))?
+            //     } else {
+            //         value.parse()
+            //             .map_err(|e| format!("Failed to parse field `{}`: {}", stringify!(#field_name), e))?
+            //     }
+            // }
+        // }
     });
 
+    // Initialize the fields in the parse call.
     let expanded = quote! {
         use brewfile_parser::ast::ParseIdent; // Ensure the trait is in scope
+        use brewfile_parser::ast::ParseIdentVec; // Ensure the trait is in scope
 
         impl #struct_name {
             pub fn parse_me(values: Vec<brewfile_parser::ast::Ident>) -> Result<Self, String> {
@@ -148,28 +150,6 @@ fn impl_parse(ast: &DeriveInput) -> TokenStream {
         }
     };
     gen.extend(expanded);
-
-
-    gen.extend(quote! {
-        impl #struct_name {
-            pub fn call(&self) {
-                println!("---- test ");
-            }
-        }
-    });
-
-    // if let syn::Data::Struct(name) = &ast.data {
-    //     if let Fields::Named(fields) = &name.fields {
-    //         for field in &fields.named {
-    //             for attr in &field.attrs {
-    //                 if attr.path().is_ident("arg") {
-    //                     arg_fields.push(field);
-    //                     break;
-    //                 }
-    //             }
-    //         }
-    //     }
-    // }
 
     // Ensure at least one `#[arg]` field exists
     if arg_fields.is_empty() {
