@@ -46,22 +46,60 @@ struct BrewMacro {
     fifth: Vec<String>,
 }
 
-// #[derive(Debug)]
-// struct P {}
+#[derive(Debug)]
+struct Test {
+    first: String,
+}
+
+
+impl Test {
+    fn new() -> Self {
+        let mut test = Self{ first: String::new() };
+        test.first = String::from("Hello");
+        test
+    }
+}
 
 fn main() {
 
     println!("Hello world");
 
-    let mut data: Vec<brewfile_parser::ast::Ident> = Vec::new();
-    data.push(brewfile_parser::ast::Ident::Str(String::from("hello")));
-    data.push(brewfile_parser::ast::Ident::Str(String::from("world")));
-    data.push(brewfile_parser::ast::Ident::Str(String::from("42")));
-    data.push(brewfile_parser::ast::Ident::List(vec![String::from("42")]));
-    data.push(brewfile_parser::ast::Ident::List(vec![String::from("42")]));
+    let data = vec![
+        brewfile_parser::ast::Ident::Str(String::from("hello")),
+        brewfile_parser::ast::Ident::Str(String::from("world")),
+        brewfile_parser::ast::Ident::Str(String::from("42")),
+        brewfile_parser::ast::Ident::List(vec![String::from("42")]),
+        brewfile_parser::ast::Ident::List(vec![String::from("42")]),
+    ];
     match BrewMacro::parse_me(data) {
         Ok(user) => println!("Parsed user: {:?}", user),
         Err(err) => eprintln!("Failed to parse: {}", err),
+    };
+
+    let data = vec![
+        brewfile_parser::ast::Ident::Str(String::from("hello")),
+        brewfile_parser::ast::Ident::Str(String::from("world")),
+        brewfile_parser::ast::Ident::Str(String::from("42")),
+        brewfile_parser::ast::Ident::List(vec![String::from("42")]),
+        brewfile_parser::ast::Ident::List(vec![String::from("42")]),
+        brewfile_parser::ast::Ident::Named(String::from("first"), Box::new(brewfile_parser::ast::Ident::Str(String::from("hello")))),
+    ];
+    println!("----- brew {:#?}", BrewMacro::parse_ident(data));
+
+    let mut map: HashMap<String, brewfile_parser::ast::Ident> = HashMap::new();
+    let data = brewfile_parser::ast::Ident::Named(String::from("first"), Box::new(brewfile_parser::ast::Ident::Str(String::from("hello world"))));
+
+    match data {
+        brewfile_parser::ast::Ident::Named(key, val) => {
+            map.insert(key.to_owned(), brewfile_parser::ast::Ident::Str(String::from("hello")));
+
+
+            let val = *val;
+            map.insert(key.to_owned(), val);
+        },
+        _ => panic!("WTF"),
     }
+
+    println!("----- brew {:#?}", map);
 }
 

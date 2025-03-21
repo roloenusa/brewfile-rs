@@ -1,5 +1,7 @@
 extern crate proc_macro;
 
+use std::collections::HashMap;
+
 use syn::{parse_macro_input, DeriveInput, Data, Fields};
 
 #[macro_use]
@@ -88,51 +90,6 @@ fn impl_parse(ast: &DeriveInput) -> TokenStream {
                 }
             }
         }
-
-
-        // quote! {
-            // #field_name: {
-            //     let value = values.get(index)
-            //         .ok_or_else(|| format!("Missing value for field `{}`", stringify!(#field_name)))?;
-            //     index += 1;
-            //
-            //     // value.parse()
-            //     //     .map_err(|e| format!("Failed to parse field `{}`: {}", stringify!(#field_name), e))?
-            //
-            //     // match value {
-            //     //     brewfile_parser::ast::Ident::Str(_) => {
-            //     //         value.parse()
-            //     //         .map_err(|e| format!("Failed to parse field `{}`: {}", stringify!(#field_name), e))?
-            //     //     },
-            //     //     // brewfile_parser::ast::Ident::List(_) => {
-            //     //     //     value.parse_vector()
-            //     //     //     .map_err(|e| format!("Failed to parse field `{}`: {}", stringify!(#field_name), e))?
-            //     //     // }
-            //     //     _ => panic!("Unable to parse value"),
-            //     // }
-            //
-            //     if let brewfile_parser::ast::Ident::List(_) = value {
-            //         value.parse_vector()
-            //             .map_err(|errs| format!("Failed to parse list field `{}`: {:?}", stringify!(#field_name), errs))?
-            //     } else {
-            //         value.parse()
-            //             .map_err(|e| format!("Failed to parse field `{}`: {}", stringify!(#field_name), e))?
-            //     }
-            // }
-            // #field_name: {
-            //     let value = values.get(index)
-            //         .ok_or_else(|| format!("Missing value for field `{}`", stringify!(#field_name)))?;
-            //     index += 1;
-            //
-            //     if <#field_type as std::any::Any>::type_id() == <Vec<String> as std::any::Any>::type_id() {
-            //         value.parse_vector()
-            //             .map_err(|errs| format!("Failed to parse list field `{}`: {:?}", stringify!(#field_name), errs))?
-            //     } else {
-            //         value.parse()
-            //             .map_err(|e| format!("Failed to parse field `{}`: {}", stringify!(#field_name), e))?
-            //     }
-            // }
-        // }
     });
 
     // Initialize the fields in the parse call.
@@ -142,10 +99,88 @@ fn impl_parse(ast: &DeriveInput) -> TokenStream {
 
         impl #struct_name {
             pub fn parse_me(values: Vec<brewfile_parser::ast::Ident>) -> Result<Self, String> {
+
                 let mut index = 0;
+
                 Ok(Self {
                     #(#field_assignments),*
                 })
+            }
+        }
+    };
+    gen.extend(expanded);
+
+
+
+
+    // Iterate over each value of the vector and attempt to parse the field
+    let field_assignments = fields.iter().map(|field| {
+        let field_name = field.ident.as_ref().unwrap();
+        field_name
+    });
+
+    // // Extract fields from the struct
+    // let field_assignments = if let syn::Data::Struct(syn::DataStruct { fields: syn::Fields::Named(fields), .. }) = &ast.data {
+    //     fields.named
+    // } else {
+    //     panic!("PrintFieldNames only supports structs with named fields");
+    // };
+
+
+
+    // // Iterate over each value of the vector and attempt to parse the field
+    // let field_assignments = fields.iter().map(|field| {
+    //     let field_name = field.ident.as_ref().unwrap();
+    //     let field_type = &field.ty;
+    //     let is_vec = match field_type {
+    //         syn::Type::Path(type_path) => {
+    //             let path = &type_path.path;
+    //             path.segments.len() == 1 && path.segments[0].ident == "Vec"
+    //         }
+    //         _ => false,
+    //     };
+    //
+    //     if is_vec {
+    //         quote! {
+    //             #field_name: {
+    //                 let value = values.get(index)
+    //                     .ok_or_else(|| format!("Missing value for field `{}`", stringify!(#field_name)))?;
+    //                 index += 1;
+    //
+    //                 value.parse_vector()
+    //                     .map_err(|errs| format!("Failed to parse list field `{}`: {:?}", stringify!(#field_name), errs))?
+    //             }
+    //         }
+    //     } else {
+    //         quote! {
+    //             #field_name: {
+    //                 let value = values.get(index)
+    //                     .ok_or_else(|| format!("Missing value for field `{}`", stringify!(#field_name)))?;
+    //                 index += 1;
+    //
+    //                 value.parse()
+    //                     .map_err(|e| format!("Failed to parse field `{}`: {}", stringify!(#field_name), e))?
+    //             }
+    //         }
+    //     }
+    // });
+
+
+
+    // Initialize the fields in the parse call.
+    let expanded = quote! {
+        use std::collections::HashMap;
+        use brewfile_parser::ast::map_values; // Ensure the trait is in scope
+
+        impl #struct_name {
+            pub fn parse_ident(values: Vec<brewfile_parser::ast::Ident>) -> Result<HashMap<String, brewfile_parser::ast::Ident>, String> {
+
+                let field_names = vec![ #(stringify!(#field_assignments).to_string()),* ];
+                println!("This is a regular value {:#?}", field_names);
+
+                let map = map_values(field_names, values);
+
+                Ok(map)
             }
         }
     };

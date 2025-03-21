@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::str::FromStr;
 
 // use brewfile_traits::Deserialize;
@@ -280,5 +281,35 @@ pub fn parse_meta_comment(input: &str) -> IResult<&str, Ident> {
 
     let named = Ident::Pair(String::from(flag_name), String::from(flag_value));
     Ok((input, named))
+}
+
+
+/**
+ * TEST stuff
+ */
+pub fn map_values(_keys: Vec<String>, values: Vec<Ident>) -> HashMap<String, Ident> {
+    let mut map: HashMap<String, Ident> = HashMap::new();
+
+    let mut named = false;
+    for (index, value) in values.into_iter().enumerate() {
+        let key = _keys.get(index).expect("It should have a value at index");
+
+        match value {
+            Ident::Named(key, val) => {
+                let val = *val;
+                map.insert(key.to_owned(), val);
+                named = true;
+            },
+            _ => {
+                if named {
+                    panic!("Unnamed values cannot follow named values");
+                }
+
+                map.insert(key.to_owned(), value);
+            },
+        };
+    };
+
+    map
 }
 
